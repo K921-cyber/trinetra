@@ -164,18 +164,22 @@ This is the only required value. **Everything else below is optional** — the a
 
 | # | Credential | Unlocks | Where to Get It |
 |---|---|---|---|
-| 1 | `GEMINI_API_KEY` | The AI Chatbot + AI-generated `.docx` reports | [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) — free |
+| 1 | `OPENROUTER_API_KEY` | The AI Chatbot + AI-generated `.docx` reports | [openrouter.ai/keys](https://openrouter.ai/keys) — free |
 | 2 | `TELEGRAM_BOT_TOKEN` | The Telegram OSINT bot | Message [@BotFather](https://t.me/BotFather) on Telegram → `/newbot` |
 | 3 | `CASHFREE_APP_ID` + `CASHFREE_SECRET_KEY` | Credit purchases / billing (leave empty = every search is free & unlimited) | [cashfree.com/developers](https://cashfree.com/developers) — sign up, use **sandbox** keys for testing |
 | 4 | `SMTP_HOST` + `SMTP_USERNAME` + `SMTP_PASSWORD` | Actually emailing signup verification codes (leave empty = OTP codes print to the backend console/terminal instead — fully usable for local testing) | See Gmail example below, or any SMTP provider |
 
 **If you leave all 4 groups empty:** the app still runs completely — AI chat shows a "not configured" message, Telegram bot doesn't start, every search is free (no credit gate), and OTP codes appear directly in your terminal log instead of an inbox. This is the fastest way to get the app running to check it works, before wiring up real credentials.
 
-#### 1. Gemini (AI Chatbot)
+#### 1. OpenRouter (AI Chatbot)
 
 ```env
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-flash-latest
+OPENROUTER_API_KEY=your_key_here
+# "openrouter/free" is OpenRouter's Free Models Router — it automatically
+# picks whichever free model is currently available, so this keeps working
+# with zero code changes even as the underlying free model rotates.
+OPENROUTER_MODEL=openrouter/free
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 ```
 
 #### 2. Telegram Bot (optional OSINT bot)
@@ -417,7 +421,7 @@ Investigating a single domain typically means juggling **multiple separate tools
 | **Cache** | Redis 7 (Docker) | TaskIQ broker, caching |
 | **Worker** | TaskIQ | Background watch task execution |
 | **Data** | httpx + feedparser | External API calls + RSS parsing |
-| **AI Chatbot** | Google Gemini API | In-app SOC assistant + report generation |
+| **AI Chatbot** | OpenRouter (Free Models Router) | In-app SOC assistant + report generation |
 | **Report Export** | python-docx | Markdown → Word (.docx) report conversion |
 | **Payments** | Cashfree PG | Credit packs via Cashfree checkout (sandbox/production) |
 | **Bot** | python-telegram-bot | Telegram OSINT leak search (optional) |
@@ -543,7 +547,7 @@ On SQLite lock contention, watch tasks retry up to 3 times with exponential back
 
 ## 🤖 AI Chatbot Assistant
 
-A floating in-app assistant (powered by Google Gemini) that acts as a SOC-analyst helper — it explains dashboard features, answers questions about a scan in progress, and can turn live scan data into a formatted investigation report.
+A floating in-app assistant (powered by OpenRouter's Free Models Router) that acts as a SOC-analyst helper — it explains dashboard features, answers questions about a scan in progress, and can turn live scan data into a formatted investigation report.
 
 ### How It Works
 
@@ -817,7 +821,7 @@ All data in TRINETRA is **real** — no simulated or placeholder data. See the t
 
 ### 🤖 AI Chatbot Assistant
 
-- Google Gemini-powered in-app SOC analyst assistant
+- OpenRouter-powered in-app SOC analyst assistant (zero-cost Free Models Router — no fixed model, auto-rotates between whichever free model is currently available)
 - Context-aware — automatically sees the current scan's findings
 - One-click **Generate Report** for a structured investigation summary
 - **Download as Word (.docx)** — formatted, cover-paged report ready to share
@@ -1078,7 +1082,7 @@ trinetra/
 │   │   │   ├── real_threat_service.py  # Real malicious IP fetcher (ThreatFox, Feodo, IPsum)
 │   │   │   ├── real_news_service.py    # Real RSS news fetcher (4 feeds)
 │   │   │   ├── watch_service.py        # Watch CRUD + alert service
-│   │   │   ├── chat_service.py         # Gemini AI chatbot service
+│   │   │   ├── chat_service.py         # OpenRouter AI chatbot service
 │   │   │   ├── docx_report_service.py  # Markdown → Word (.docx) report generator
 │   │   │   ├── email_service.py        # SMTP transport + Jinja2 template rendering (OTP emails)
 │   │   │   ├── payment_service.py      # Cashfree orders, verification, webhooks, flat pricing
@@ -1173,8 +1177,9 @@ trinetra/
 | `TELEGRAM_BOT_TOKEN` | `""` | Telegram Bot token |
 | `TELEGRAM_OSINT_API_URL` | `""` | OSINT Leak API base URL |
 | `TELEGRAM_OSINT_API_KEY` | `""` | API key for OSINT API |
-| `GEMINI_API_KEY` | `""` | Google Gemini API key (enables AI chatbot & report generation) |
-| `GEMINI_MODEL` | `gemini-flash-latest` | Gemini model used for chatbot replies |
+| `OPENROUTER_API_KEY` | `""` | OpenRouter API key (enables AI chatbot & report generation) |
+| `OPENROUTER_MODEL` | `openrouter/free` | OpenRouter model/router used for chatbot replies — `openrouter/free` auto-selects a currently available free model |
+| `OPENROUTER_BASE_URL` | `https://openrouter.ai/api/v1` | OpenRouter API base URL |
 | `SMTP_HOST` | `""` | SMTP server hostname (empty = OTP codes print to console instead of emailing) |
 | `SMTP_PORT` | `587` | SMTP port — 587 for STARTTLS, 465 for implicit SSL |
 | `SMTP_USERNAME` | `""` | SMTP auth username (usually your full email address) |
