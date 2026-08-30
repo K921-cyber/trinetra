@@ -42,9 +42,10 @@ class Settings(BaseSettings):
     telegram_osint_api_url: str = ""  # OSINT Leak API base URL
     telegram_osint_api_key: str = ""  # API key for OSINT API (sent as X-API-Key header)
 
-    # AI Chatbot (Google Gemini)
-    gemini_api_key: str = ""  # set via GEMINI_API_KEY env var
-    gemini_model: str = "gemini-flash-latest"
+    # AI Chatbot (OpenRouter — Free Models Router, zero-cost inference)
+    openrouter_api_key: str = ""  # set via OPENROUTER_API_KEY — get a free key at https://openrouter.ai/keys
+    openrouter_model: str = "openrouter/free"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # ==================== Email Verification (SMTP) ====================
     # Generic SMTP settings — works with Gmail, SendGrid, Mailgun, Amazon SES,
