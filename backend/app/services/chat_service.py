@@ -47,6 +47,19 @@ BASE_BACKOFF_SECONDS = 1.5
 # data is being cut — which we do NOT want to do silently.
 MAX_CONTEXT_CHARS = 150_000
 
+# Defense-in-depth: some free models leak tool-call syntax as plain text
+# even with no tools defined in the request and a system prompt telling
+# them not to. Strip it server-side so it never reaches the UI, rather
+# than relying on the prompt alone.
+_TOOL_CALL_LEAK_PATTERN = re.compile(
+    r"<\|?tool_call[_\s]?(start|end)?\|?>.*?(?=<\|?tool_call[_\s]?end\|?>|\Z)",
+    re.DOTALL | re.IGNORECASE,
+)
+
+
+def _strip_tool_call_leaks(text: str) -> str:
+    return _TOOL_CALL_LEAK_PATTERN.sub("", text).strip()
+
 # Some free models behind the OpenRouter router are tool/function-call
 # fine-tuned and will occasionally emit tool-call-style tokens (e.g.
 # "<|tool_call_start|> [some_function(...)] <|tool_call_end|>") even
@@ -90,11 +103,14 @@ BASE_SYSTEM_PROMPT = (
     "report. Be friendly and practical. If asked something unrelated, answer "
     "briefly and steer back to being useful.\n\n"
     "You do NOT have access to any tools, functions, or plugins yourself — you "
-    "cannot call anything named 'trinetra_report' or similar. You only ever "
-    "respond with plain markdown text written directly to the user. Never output "
-    "tool-call syntax, function-call syntax, JSON function invocations, or special "
-    "tokens like <|tool_call_start|>. If the user asks you to generate a report, "
-    "you generate it yourself, right now, as markdown text in your reply."
+    "cannot call ANY function, by any name (e.g. 'trinetra_report' or similar). "
+    "You only ever respond with plain markdown text written directly to the user. "
+    "Never output tool-call syntax, function-call syntax, JSON function "
+    "invocations, or special tokens such as <|tool_call_start|>, <tool_call>, "
+    "[TOOL_CALL], or similar markers from any model family. If the user asks for "
+    "a report, write it yourself, right now, as plain markdown text in your "
+    "reply — never as a function call, never as JSON, and never wrapped in a "
+    "single outer code fence around the whole response."
 )
 
 REPORT_INSTRUCTIONS = (
@@ -222,6 +238,8 @@ class ChatService:
                     # nothing for the actual answer) — `or ""` catches that
                     # case too so text is always a string, never None.
                     text = choices[0].get("message", {}).get("content") or ""
+                    text = _strip_tool_call_leaks(text)
+                    return text or "Sorry, I didn't get a response — try again."
 
                     # Some free models hallucinate a fake tool call, or leak
                     # their internal reasoning, instead of writing the actual

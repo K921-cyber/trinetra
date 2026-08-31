@@ -1334,6 +1334,26 @@ cd frontend && npm install && npx vite --host 0.0.0.0 --port 3000
 
 ---
 
+<br/>
+
+<details>
+<summary><sub>Project Credits</sub></summary>
+
+<sub>
+
+| Role | Name |
+|---|---|
+| Team Leader — proposed the idea, initial planning & initial code | Kabir Chand |
+| R&D Head — managed the project | Divyang Sarkari |
+| Team Leader — coordinated the project | Mohit Chaudhary |
+| Employee — initial implementation | Vinay Paul |
+
+*Our team's scope was to develop this project and hand it over to higher authority.*
+
+</sub>
+
+</details>
+
 ## 📄 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
