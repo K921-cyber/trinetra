@@ -1,10 +1,11 @@
-import React, { useEffect, useCallback, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useCallback, useRef, useState } from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup, GeoJSON, useMap } from 'react-leaflet';
 import * as L from 'leaflet';
 import { useApp } from '../../store/AppContext';
 import { CityData, RiskLevel, CrimeDataPoint } from '../../types';
 import { useThreatContext } from '../../store/ThreatContext';
-import indiaStatesGeoJSON from '../../utils/indiaStatesGeoJSON';
+import indiaStatesGeoJSON from '../../utils/basemap/indiaStates';
+import LocalBasemap from './LocalBasemap';
 
 import { BoltIcon, FlameIcon, GraphIcon, HomeIcon, SearchIcon, ShieldIcon, CloseIcon } from '../Icons/Icons';
 import { VectorDetailModal, VectorLike } from '../VectorDetailModal/VectorDetailModal';
@@ -14,6 +15,45 @@ import DataSourcesPanel from '../DataSourcesPanel/DataSourcesPanel';
 interface GeoFeature extends GeoJSON.Feature<GeoJSON.Geometry> {}
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
+
+// Map framing. The default view is centred on India — that is where the crime
+// heatmap and city markers live — but pulled back far enough that the rest of the
+// world (attack origins) stays visible around it. The view is scaled to the map
+// area on load, on Reset View and when the map resizes, so no single fixed zoom
+// has to crop or leave gutters at a particular window size.
+//
+// WORLD_BOUNDS doubles as `maxBounds`, keeping the view on one copy of the globe
+// (no empty space or repeated continents past the antimeridian). The zoom at which
+// it covers the map area is the minimum zoom, so zooming out stops when the world
+// fills the frame instead of revealing background around it.
+const WORLD_BOUNDS = L.latLngBounds(
+  L.latLng(-85, -180),
+  L.latLng(85, 180)
+);
+
+// India plus context: 3°N–44°N and 52°E–112°E, i.e. the subcontinent with the
+// Indian Ocean and east Africa / Arabia to the west and China / South-East Asia to
+// the east. Fitted as "contain", so the region is always fully visible and the
+// world basemap fills whatever space is left over — India reads as the subject
+// with no empty bands around the frame.
+const INDIA_FOCUS_BOUNDS = L.latLngBounds(
+  L.latLng(3, 52),
+  L.latLng(44, 112)
+);
+const INDIA_FOCUS_CENTER: [number, number] = [23.5, 82]; // centre of INDIA_FOCUS_BOUNDS
+const DEFAULT_ZOOM = 4; // pre-fit placeholder; DefaultView replaces it on mount
+
+// Basemap source. Empty (the default) = the bundled local GeoJSON basemap, so
+// the map makes zero external requests. Set VITE_MAP_TILE_URL to a self-hosted
+// raster tile server (e.g. http://localhost:8080/tile/{z}/{x}/{y}.png) to use
+// tiles instead — light tiles are darkened by the .map-tiles-light CSS filter.
+const MAP_TILE_URL = ((import.meta.env.VITE_MAP_TILE_URL as string | undefined) || '').trim();
+
+// NCRB state names vs. Natural Earth names (e.g. "Jammu & Kashmir" →
+// "Jammu and Kashmir"); normalising keeps the crime overlay matched to geometry.
+function normalizeStateName(name: string): string {
+  return name.toLowerCase().replace(/&/g, 'and').replace(/\s+/g, ' ').trim();
+}
 
 // ==================== Color Constants ====================
 
@@ -516,7 +556,7 @@ function AnimatedAttackOverlay({ vectors, visible }: { vectors: VectorLike[]; vi
 
 function CrimeHeatmap({ visible, crimeData }: { visible: boolean; crimeData: CrimeDataPoint[] }) {
   const crimeDataByName = React.useMemo(
-    () => new Map(crimeData.map(cd => [cd.state.toLowerCase(), cd])),
+    () => new Map(crimeData.map(cd => [normalizeStateName(cd.state), cd])),
     [crimeData]
   );
 
@@ -525,8 +565,8 @@ function CrimeHeatmap({ visible, crimeData }: { visible: boolean; crimeData: Cri
   const maxCount = Math.max(...crimeData.map(cd => cd.incidentCount), 1);
 
   const geoStyle = (feature?: GeoJSON.Feature) => {
-    const stateName = feature?.properties?.name?.toLowerCase();
-    const cd = stateName ? crimeDataByName.get(stateName) : undefined;
+    const stateName = feature?.properties?.name as string | undefined;
+    const cd = stateName ? crimeDataByName.get(normalizeStateName(stateName)) : undefined;
     const intensity = cd ? Math.min(cd.incidentCount / maxCount, 1) : 0;
     const isHigh = intensity > 0.4;
     const isMedium = intensity > 0.1;
@@ -543,7 +583,7 @@ function CrimeHeatmap({ visible, crimeData }: { visible: boolean; crimeData: Cri
   const onEachFeature = (feature: GeoJSON.Feature, layer: L.Layer) => {
     const pathLayer = layer as L.Path;
     const stateName = feature?.properties?.name || 'Unknown State';
-    const cd = crimeDataByName.get(stateName.toLowerCase());
+    const cd = crimeDataByName.get(normalizeStateName(stateName));
     const intensity = cd ? Math.min(cd.incidentCount / maxCount, 1) : 0;
     const isHigh = intensity > 0.4;
     const isMedium = intensity > 0.1;
@@ -597,10 +637,81 @@ function CrimeHeatmap({ visible, crimeData }: { visible: boolean; crimeData: Cri
 function MapController({ center, zoom }: { center: [number, number]; zoom: number }) {
   const map = useMap();
   const centerKey = `${center[0].toFixed(4)},${center[1].toFixed(4)}`;
+  const firstRunRef = useRef(true);
   useEffect(() => {
+    // The map is already constructed at this center/zoom and WorldFit owns the
+    // initial view, so animating to it here would only fight the fit.
+    if (firstRunRef.current) {
+      firstRunRef.current = false;
+      return;
+    }
     map.setView(center, zoom, { animate: true, duration: 0.8 });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [centerKey, zoom, map]);
+  return null;
+}
+
+// ==================== Default View (India, with the world around it) ====================
+
+// Frames the map on India: the focus region scaled to fit the area, but never
+// further out than the zoom at which the whole world covers the frame.
+function fitDefaultView(map: L.Map): number | null {
+  const { clientWidth, clientHeight } = map.getContainer();
+  if (clientWidth < 40 || clientHeight < 40) return null; // container not laid out yet
+
+  map.setMinZoom(0); // measure true fits even if the map changed size since last time
+
+  // Floor: the furthest the user may zoom out — the world exactly covering the
+  // frame (inside=true), so zooming out can never expose background past the globe.
+  const worldCoverZoom = map.getBoundsZoom(WORLD_BOUNDS, true);
+
+  // Default: the India region fully in view (inside=false → contain). On a wide
+  // panel the region's height limits the zoom, which is what keeps India large
+  // instead of a speck in a shrunken globe.
+  const focusZoom = map.getBoundsZoom(INDIA_FOCUS_BOUNDS, false);
+  const zoom = Math.max(worldCoverZoom, focusZoom);
+
+  map.setMinZoom(worldCoverZoom);
+  // Idempotent: also recentres when the view was panned away from India.
+  map.setView(INDIA_FOCUS_CENTER, zoom, { animate: false });
+  return zoom;
+}
+
+function DefaultView({ mapRef }: { mapRef: React.MutableRefObject<L.Map | null> }) {
+  const map = useMap();
+  const fittedZoomRef = useRef<number | null>(null);
+
+  // Layout effect, not effect: frame the map before the first paint so it never
+  // flashes at the placeholder zoom on its way to the fitted view.
+  useLayoutEffect(() => {
+    mapRef.current = map;
+
+    const fit = () => {
+      const zoom = fitDefaultView(map);
+      if (zoom !== null) fittedZoomRef.current = zoom;
+    };
+    fit();
+
+    // Keep the default view framed as the dashboard layout changes (window
+    // resize, panels opening). Once the user has zoomed in, leave their view alone.
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const fitted = fittedZoomRef.current;
+        if (fitted === null || Math.abs(map.getZoom() - fitted) > 0.05) return;
+        fit();
+      });
+    });
+    observer.observe(map.getContainer());
+
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      if (mapRef.current === map) mapRef.current = null;
+    };
+  }, [map, mapRef]);
+
   return null;
 }
 
@@ -630,6 +741,93 @@ function AttackCounter({ vectors, visible, isConnected }: { vectors: VectorLike[
         <span className="attack-sep">·</span>
         <span className="attack-medium">{mediumCount} medium</span>
       </div>
+    </div>
+  );
+}
+
+// ==================== Map Intel HUD (situational info overlay) ====================
+
+function MapIntelHud({
+  vectors,
+  isConnected,
+  crimeStates,
+  showAttacks,
+  showCrimeOverlay,
+}: {
+  vectors: VectorLike[];
+  isConnected: boolean;
+  crimeStates: number;
+  showAttacks: boolean;
+  showCrimeOverlay: boolean;
+}) {
+  const stats = React.useMemo(() => {
+    const origins = new Set<string>();
+    const targets = new Set<string>();
+    const types = new Set<string>();
+    const bySource: Record<string, number> = {};
+    let critical = 0;
+    let medium = 0;
+    let safe = 0;
+    vectors.forEach(v => {
+      if (v.from) origins.add(v.from);
+      if (v.to) targets.add(v.to);
+      if (v.attackType) types.add(v.attackType);
+      const src = v.source || 'Unknown';
+      bySource[src] = (bySource[src] || 0) + 1;
+      if (v.severity === 'critical') critical++;
+      else if (v.severity === 'medium') medium++;
+      else safe++;
+    });
+    return { origins: origins.size, targets: targets.size, types: types.size, bySource, critical, medium, safe };
+  }, [vectors]);
+
+  return (
+    <div className="map-intel-hud">
+      <div className="mih-header">
+        <span className="mih-title">MAP INTEL</span>
+        <span className={`mih-status ${isConnected ? 'live' : 'offline'}`}>
+          <span className="mih-status-dot" />
+          {isConnected ? 'LIVE FEED' : 'OFFLINE'}
+        </span>
+      </div>
+
+      <div className="mih-section">
+        <div className="mih-section-title">View</div>
+        <div className="mih-row"><span className="mih-k">Focus</span><span className="mih-v">India (world context)</span></div>
+        <div className="mih-row"><span className="mih-k">Basemap</span><span className="mih-v">Natural Earth · local</span></div>
+        <div className="mih-row"><span className="mih-k">Crime layer</span><span className="mih-v">{showCrimeOverlay ? `On · ${crimeStates} states (NCRB 2022)` : 'Off'}</span></div>
+      </div>
+
+      <div className="mih-section">
+        <div className="mih-section-title">Threats {showAttacks ? '' : '(hidden)'}</div>
+        <div className="mih-grid">
+          <div className="mih-metric"><span className="mih-metric-value">{vectors.length}</span><span className="mih-metric-label">Active</span></div>
+          <div className="mih-metric critical"><span className="mih-metric-value">{stats.critical}</span><span className="mih-metric-label">Critical</span></div>
+          <div className="mih-metric medium"><span className="mih-metric-value">{stats.medium}</span><span className="mih-metric-label">Medium</span></div>
+          <div className="mih-metric"><span className="mih-metric-value">{stats.safe}</span><span className="mih-metric-label">Low</span></div>
+        </div>
+        <div className="mih-row"><span className="mih-k">Origins</span><span className="mih-v">{stats.origins || '—'}</span></div>
+        <div className="mih-row"><span className="mih-k">Targets</span><span className="mih-v">{stats.targets || '—'}</span></div>
+        <div className="mih-row"><span className="mih-k">Attack types</span><span className="mih-v">{stats.types || '—'}</span></div>
+      </div>
+
+      <div className="mih-section">
+        <div className="mih-section-title">Intel feeds</div>
+        {Object.keys(stats.bySource).length > 0 ? (
+          <div className="mih-feeds">
+            {Object.entries(stats.bySource).map(([name, count]) => (
+              <span key={name} className="mih-feed-chip">
+                <span className="mih-feed-dot" style={{ background: FEED_COLORS[name] || '#5a6a80' }} />
+                {name} <strong>{count}</strong>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="mih-row"><span className="mih-v muted">{isConnected ? 'Awaiting vectors…' : 'Connecting to feed…'}</span></div>
+        )}
+      </div>
+
+      <div className="mih-footnote">Source IPs & types are real; target cities are statistically modeled (NCRB).</div>
     </div>
   );
 }
@@ -803,6 +1001,7 @@ export default function IndiaMap() {
   const [selectedVector, setSelectedVector] = useState<VectorLike | null>(null);
   const [showDataSources, setShowDataSources] = useState(false);
   const [ncrbCrimeData, setNcrbCrimeData] = useState<CrimeDataPoint[] | null>(null);
+  const mapRef = useRef<L.Map | null>(null);
 
   // Fetch real NCRB crime data from backend
   useEffect(() => {
@@ -830,9 +1029,13 @@ export default function IndiaMap() {
     [ncrbCrimeData]
   );
 
-  const handleZoomToIndia = useCallback(() => {
-    dispatch({ type: 'SET_MAP_CENTER', payload: [20.5937, 78.9629] });
-    dispatch({ type: 'SET_MAP_ZOOM', payload: 5 });
+  const handleResetView = useCallback(() => {
+    const map = mapRef.current;
+    // Measure the current map area and hand that zoom to the app state, so the
+    // controller animates to the same view a load/resize would produce.
+    const zoom = map ? fitDefaultView(map) : null;
+    dispatch({ type: 'SET_MAP_CENTER', payload: INDIA_FOCUS_CENTER });
+    dispatch({ type: 'SET_MAP_ZOOM', payload: zoom ?? DEFAULT_ZOOM });
     dispatch({ type: 'SET_SELECTED_CITY', payload: null });
   }, [dispatch]);
 
@@ -844,14 +1047,32 @@ export default function IndiaMap() {
         className="map-wrapper"
         zoomControl={true}
         scrollWheelZoom={true}
+        maxBounds={WORLD_BOUNDS}
+        maxBoundsViscosity={0.9}
+        minZoom={0}
+        zoomSnap={0}
+        zoomDelta={0.5}
         style={{ height: '100%', width: '100%' }}
       >
-        <TileLayer
-          attribution='&copy; <a href="https://stadiamaps.com/" target="_blank">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/" target="_blank">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
-          url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
-        />
+        {/* Basemap. Default: bundled Natural Earth GeoJSON rendered locally —
+            no map API, no key, no tile quota, no third party that can break on
+            a hosting platform. Set VITE_MAP_TILE_URL to use your own tile
+            server instead (e.g. http://localhost:8080/tile/{z}/{x}/{y}.png). */}
+        {MAP_TILE_URL ? (
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank">OpenStreetMap</a> contributors'
+            url={MAP_TILE_URL}
+            className="map-tiles-light"
+            maxNativeZoom={19}
+            maxZoom={19}
+          />
+        ) : (
+          <LocalBasemap />
+        )}
 
         <MapController center={state.mapCenter} zoom={state.mapZoom} />
+        {/* Keeps India centred and the world visible around it, scaled to the map area */}
+        <DefaultView mapRef={mapRef} />
 
         {/* Animated SVG attack vectors */}
         <AnimatedAttackOverlay vectors={activeAttackVectors} visible={showAttacks} />
@@ -874,7 +1095,7 @@ export default function IndiaMap() {
       <div className={`map-connection-status ${threatState.isConnected ? 'connected' : 'disconnected'}`}>
         <span className="mcs-dot" />
         <span className="mcs-text">
-          {threatState.isConnected ? 'LIVE — Real threat data from ThreatFox, Feodo & IPsum' : 'Connecting to threat feed...'}
+          {threatState.isConnected ? 'LIVE — Real threat intel from Abuse.ch & IPsum feeds' : 'Connecting to threat feed...'}
         </span>
         {threatState.isConnected && (
           <span className="mcs-badge">REAL DATA</span>
@@ -883,6 +1104,15 @@ export default function IndiaMap() {
 
       {/* Live attack counter (compact, top-right) */}
       <AttackCounter vectors={activeAttackVectors} visible={showAttacks} isConnected={threatState.isConnected} />
+
+      {/* Situational info HUD */}
+      <MapIntelHud
+        vectors={activeAttackVectors}
+        isConnected={threatState.isConnected}
+        crimeStates={crimeData.length}
+        showAttacks={showAttacks}
+        showCrimeOverlay={state.showCrimeOverlay}
+      />
 
       {/* Attack info panel with origin intelligence (bottom-right, open by default) */}
       <AttackInfoPanel vectors={activeAttackVectors} visible={showAttacks} onSelectVector={setSelectedVector} />
@@ -923,7 +1153,7 @@ export default function IndiaMap() {
       </div>
 
       <div className="map-controls">
-        <button className="map-control-btn" onClick={handleZoomToIndia}>
+        <button className="map-control-btn" onClick={handleResetView}>
           <HomeIcon size={13} /> Reset View
         </button>
         {state.selectedCity && (
@@ -961,7 +1191,7 @@ export default function IndiaMap() {
         <div className="legend-title">DATA SOURCES</div>
         <div className="legend-item">
           <span className="feed-legend-dot" style={{ background: '#8b5cf6' }} />
-          ThreatFox (Malware IOCs)
+          ThreatFox (Malware IOCs, Auth-Key)
         </div>
         <div className="legend-item">
           <span className="feed-legend-dot" style={{ background: '#06b6d4' }} />

@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # External API keys
     hibp_api_key: str = ""  # Have I Been Pwned v3 API key (set via HIBP_API_KEY env var)
 
+    # Abuse.ch ThreatFox (free Auth-Key from https://auth.abuse.ch — set via
+    # THREATFOX_AUTH_KEY). Required since 2026-10-21, when abuse.ch retired
+    # keyless exports; without it the ThreatFox feed is skipped.
+    threatfox_auth_key: str = ""
+
     # Telegram OSINT Bot
     telegram_bot_token: str = ""  # Telegram Bot token from @BotFather
     telegram_osint_api_url: str = ""  # OSINT Leak API base URL

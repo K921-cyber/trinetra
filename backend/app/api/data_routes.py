@@ -20,8 +20,8 @@ router = APIRouter(prefix="/api", tags=["data"])
 # Feed source URLs for the health panel
 FEED_SOURCE_DETAILS = {
     "ThreatFox": {
-        "url": "https://threatfox.abuse.ch/export/csv/recent/",
-        "description": "Malware IOC feed — threat types & malware families",
+        "url": "https://threatfox-api.abuse.ch/api/v1/",
+        "description": "Malware IOC feed — threat types & malware families (needs free Auth-Key)",
     },
     "Feodo": {
         "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.csv",

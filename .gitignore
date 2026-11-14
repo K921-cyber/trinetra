@@ -47,3 +47,4 @@ nul
 *.nul
 # Vite cache
 .vite/
+frontend/tsconfig.tsbuildinfo

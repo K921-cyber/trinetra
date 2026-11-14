@@ -5,10 +5,12 @@ Fetches real malicious IP addresses from free threat intel feeds
 (Abuse.ch ThreatFox, Feodo Tracker) and geo-locates them to
 generate real attack vector data for the map.
 
-No API keys required — uses public CSV/data dumps.
+Feodo and IPsum need no key. ThreatFox requires a free abuse.ch Auth-Key
+since 2026-10-21, when abuse.ch stopped serving keyless file exports
+(the old CSV export now answers HTTP 410) — set THREATFOX_AUTH_KEY.
 
 Sources:
-  - ThreatFox: https://threatfox.abuse.ch/export/csv/recent/
+  - ThreatFox: https://threatfox-api.abuse.ch/api/v1/ (Auth-Key header)
   - Feodo Tracker: https://feodotracker.abuse.ch/downloads/ipblocklist.csv
   - IPsum (aggregate): https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt
 
@@ -29,14 +31,39 @@ from typing import Optional, Dict, List
 
 import aiohttp
 
+from app.core.config import settings
+
 logger = logging.getLogger("trinetra.real_threat")
 
-# Free threat data feeds (no API key required)
+# Keyless threat data feeds
 THREAT_FEEDS = {
     "feodo": "https://feodotracker.abuse.ch/downloads/ipblocklist.csv",
-    "threatfox_recent": "https://threatfox.abuse.ch/export/csv/recent/",
     "ipsum": "https://raw.githubusercontent.com/stamparm/ipsum/master/ipsum.txt",
 }
+
+# ThreatFox JSON API — requires a free Auth-Key (https://auth.abuse.ch)
+THREATFOX_API_URL = "https://threatfox-api.abuse.ch/api/v1/"
+THREATFOX_AUTH_HELP = "ThreatFox needs a free Auth-Key (https://auth.abuse.ch) in THREATFOX_AUTH_KEY"
+
+_IPV4_RE = re.compile(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$")
+
+
+def _parse_ipv4(value) -> Optional[str]:
+    """Return a bare IPv4 address from a ThreatFox IOC, else None.
+
+    ThreatFox lists network IOCs as ``1.2.3.4:443``; IPv6 and domain/URL
+    IOCs are skipped because ip-api.com geo-location here is IPv4 only.
+    """
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    if candidate.count(":") == 1:
+        candidate = candidate.split(":", 1)[0]
+    if not _IPV4_RE.match(candidate):
+        return None
+    if any(int(part) > 255 for part in candidate.split(".")):
+        return None
+    return candidate
 
 # Indian cities for targeting (real data maps generic threats to Indian visualization)
 INDIAN_CITIES = [
@@ -137,6 +164,7 @@ class RealThreatService:
         self._event_id = 0
         self._session: aiohttp.ClientSession | None = None
         self._last_geo_check: Dict[str, float] = {}  # rate limiting
+        self._threatfox_key_warned = False  # log the missing Auth-Key only once
         # Per-IP real threat metadata from feeds
         self._ip_metadata: Dict[str, Dict] = {}  # IP → {source, attack_type, malware, score}
         # Data source health tracking
@@ -168,9 +196,23 @@ class RealThreatService:
             await self._session.close()
             self._session = None
 
-    async def _fetch_threatfox_csv(self) -> List[Dict]:
-        """Fetch recent IOCs from ThreatFox CSV export with real threat types."""
-        results = []
+    async def _fetch_threatfox_iocs(self) -> List[Dict]:
+        """Fetch recent IOCs from the ThreatFox API with real threat types.
+
+        Requires THREATFOX_AUTH_KEY (free, from https://auth.abuse.ch).
+        Without it the source is reported as disabled rather than failed.
+        """
+        results: List[Dict] = []
+        auth_key = settings.threatfox_auth_key.strip()
+        if not auth_key:
+            self._source_health["ThreatFox"] = {
+                "status": "disabled", "last_fetch": None,
+                "ip_count": 0, "error": THREATFOX_AUTH_HELP
+            }
+            if not self._threatfox_key_warned:
+                logger.warning(THREATFOX_AUTH_HELP)
+                self._threatfox_key_warned = True
+            return results
         if not self._session:
             self._source_health["ThreatFox"] = {
                 "status": "error", "last_fetch": datetime.now(timezone.utc).isoformat(),
@@ -178,7 +220,12 @@ class RealThreatService:
             }
             return results
         try:
-            async with self._session.get(THREAT_FEEDS["threatfox_recent"], timeout=15) as resp:
+            async with self._session.post(
+                THREATFOX_API_URL,
+                json={"query": "get_iocs", "days": 1},
+                headers={"Auth-Key": auth_key},
+                timeout=20,
+            ) as resp:
                 if resp.status != 200:
                     logger.warning("ThreatFox returned status %d", resp.status)
                     self._source_health["ThreatFox"] = {
@@ -186,40 +233,51 @@ class RealThreatService:
                         "ip_count": 0, "error": f"HTTP {resp.status}"
                     }
                     return results
-                text = await resp.text()
-                reader = csv.reader(io.StringIO(text))
-                for row in reader:
-                    if not row or row[0].startswith("#") or row[0].startswith("id"):
-                        continue
-                    # ThreatFox CSV columns:
-                    # 0=id, 1=date, 2=threat_type, 3=description, 4=ioc (IP),
-                    # 5=ioc_type (malware family), ...
-                    if len(row) >= 5:
-                        ip = row[4].strip()
-                        if not re.match(r"^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$", ip):
-                            continue
-                        threat_type = row[2].strip() if len(row) > 2 else ""
-                        description = row[3].strip() if len(row) > 3 else ""
-                        malware_family = row[5].strip() if len(row) > 5 else ""
+                payload = await resp.json(content_type=None)
 
-                        # Classify human-readable attack type from the threat_type field
-                        attack_type, type_estimated = _classify_threat(threat_type + " " + description)
-
-                        results.append({
-                            "ip": ip,
-                            "source": "ThreatFox",
-                            "threat_type": threat_type,  # e.g. "botnet_cc", "payload_delivery"
-                            "malware": malware_family,    # e.g. "win.nanocore", "js.clearfake"
-                            "attack_type": attack_type,   # human-readable: "Botnet C2", "Malware"
-                            "description": description[:100] if description else "",
-                            "type_estimated": type_estimated,  # True if no keywords matched
-                        })
-                        if len(results) >= 100:
-                            break
+            query_status = payload.get("query_status") if isinstance(payload, dict) else None
+            # "no_result" is a normal empty window; anything else is a failure
+            if query_status not in ("ok", "no_result"):
                 self._source_health["ThreatFox"] = {
-                    "status": "healthy", "last_fetch": datetime.now(timezone.utc).isoformat(),
-                    "ip_count": len(results), "error": None
+                    "status": "error", "last_fetch": datetime.now(timezone.utc).isoformat(),
+                    "ip_count": 0, "error": str(query_status or "unexpected API response")[:100]
                 }
+                return results
+
+            seen = set()
+            for ioc in payload.get("data") or []:
+                if not isinstance(ioc, dict):
+                    continue
+                ip = _parse_ipv4(ioc.get("ioc"))
+                if not ip or ip in seen:
+                    continue
+                seen.add(ip)
+
+                threat_type = str(ioc.get("threat_type") or "").strip()
+                malware_family = str(
+                    ioc.get("malware_printable") or ioc.get("malware") or ""
+                ).strip()
+                description = malware_family or threat_type
+
+                # Classify human-readable attack type from the threat_type field
+                attack_type, type_estimated = _classify_threat(threat_type + " " + description)
+
+                results.append({
+                    "ip": ip,
+                    "source": "ThreatFox",
+                    "threat_type": threat_type,   # e.g. "botnet_cc", "payload_delivery"
+                    "malware": malware_family,    # e.g. "win.nanocore", "Emotet"
+                    "attack_type": attack_type,   # human-readable: "Botnet C2", "Malware"
+                    "description": description[:100],
+                    "type_estimated": type_estimated,  # True if no keywords matched
+                })
+                if len(results) >= 100:
+                    break
+
+            self._source_health["ThreatFox"] = {
+                "status": "healthy", "last_fetch": datetime.now(timezone.utc).isoformat(),
+                "ip_count": len(results), "error": None
+            }
         except Exception as e:
             logger.error("Error fetching ThreatFox: %s", e)
             self._source_health["ThreatFox"] = {
@@ -537,7 +595,7 @@ class RealThreatService:
             while self._running:
                 # Fetch from all sources in parallel (now returns enriched dicts)
                 results = await asyncio.gather(
-                    self._fetch_threatfox_csv(),
+                    self._fetch_threatfox_iocs(),
                     self._fetch_feodo_csv(),
                     self._fetch_ipsum(),
                     return_exceptions=True,

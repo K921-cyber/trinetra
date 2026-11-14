@@ -4,7 +4,7 @@ import { useThreatContext } from '../../store/ThreatContext';
 // ==================== Types ====================
 
 interface SourceHealth {
-  status: 'healthy' | 'error' | 'unknown';
+  status: 'healthy' | 'error' | 'unknown' | 'disabled';
   last_fetch: string | null;
   error: string | null;
   url?: string;
@@ -35,6 +35,7 @@ const STATUS_CONFIG: Record<string, { icon: string; color: string; label: string
   healthy: { icon: '🟢', color: '#22c55e', label: 'Online' },
   error: { icon: '🔴', color: '#ef4444', label: 'Error' },
   unknown: { icon: '🟡', color: '#eab308', label: 'Connecting...' },
+  disabled: { icon: '⚫', color: '#5a6a80', label: 'Not configured' },
   static: { icon: '📄', color: '#3b82f6', label: 'Static Data' },
 };
 

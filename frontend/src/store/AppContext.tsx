@@ -15,8 +15,8 @@ const initialState: AppState = {
   completedPlugins: 0,
   activeToolId: null,
   viewMode: 'gui',
-  mapCenter: [20.5937, 78.9629], // Center of India
-  mapZoom: 5,
+  mapCenter: [23.5, 82], // India-centred default view; neighbouring world stays visible
+  mapZoom: 4, // replaced on mount by the zoom that frames India in the map area
   selectedCity: null,
   showCrimeOverlay: false,
   showGraphView: false,

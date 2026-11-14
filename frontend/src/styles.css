@@ -2834,6 +2834,153 @@ body {
 .attack-sep { margin: 0 3px; opacity: 0.4; }
 .attack-medium { color: var(--accent-yellow); }
 
+/* ==================== Map Intel HUD ==================== */
+.map-intel-hud {
+  position: absolute;
+  top: 52px;
+  left: 12px;
+  z-index: 1000;
+  width: 232px;
+  padding: 10px 12px;
+  background: rgba(8, 12, 24, 0.82);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 11px;
+  color: var(--text-secondary);
+  animation: fadeIn 0.3s ease;
+  max-height: calc(100vh - 280px);
+  overflow-y: auto;
+}
+
+.mih-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(50, 65, 90, 0.35);
+}
+
+.mih-title {
+  font-size: 8px;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+}
+
+.mih-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+}
+.mih-status.live { color: var(--accent-green); }
+.mih-status.offline { color: var(--accent-yellow); }
+
+.mih-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 6px currentColor;
+}
+.mih-status.live .mih-status-dot { animation: pulse 1.5s infinite; }
+
+.mih-section {
+  margin-bottom: 8px;
+}
+.mih-section:last-of-type { margin-bottom: 4px; }
+
+.mih-section-title {
+  font-size: 8px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.mih-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+  line-height: 1.4;
+}
+.mih-k { color: var(--text-muted); font-size: 10px; }
+.mih-v { color: var(--text-primary); font-size: 10px; font-weight: 500; text-align: right; }
+.mih-v.muted { color: var(--text-muted); font-weight: 400; }
+
+.mih-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.mih-metric {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 2px;
+  background: rgba(16, 24, 40, 0.6);
+  border: 1px solid rgba(50, 65, 90, 0.25);
+  border-radius: 6px;
+}
+.mih-metric-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  line-height: 1.1;
+}
+.mih-metric.critical .mih-metric-value { color: var(--accent-red); }
+.mih-metric.medium .mih-metric-value { color: var(--accent-yellow); }
+.mih-metric-label {
+  font-size: 7px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 1px;
+}
+
+.mih-feeds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.mih-feed-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: rgba(16, 24, 40, 0.6);
+  border: 1px solid rgba(50, 65, 90, 0.3);
+  border-radius: 10px;
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+.mih-feed-chip strong { color: var(--text-primary); font-weight: 700; }
+.mih-feed-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mih-footnote {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(50, 65, 90, 0.25);
+  font-size: 8px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 /* ==================== Live Feed Page ==================== */
 
 .live-feed-page {
@@ -4893,6 +5040,58 @@ body {
 .leaflet-container {
   background: #050810 !important;
   font-family: 'Inter', sans-serif !important;
+}
+
+/* Dark-mode treatment for *light* raster tiles, used only when a self-hosted
+   tile server is configured via VITE_MAP_TILE_URL (the TileLayer gets the
+   .map-tiles-light class). The default local GeoJSON basemap is dark already,
+   so it is unaffected. Overlay panes render unfiltered above the tiles. */
+.leaflet-tile-pane .map-tiles-light img.leaflet-tile {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.55);
+}
+
+/* Local basemap state labels (divIcon). Non-interactive: map drag and the
+   crime overlay's tooltips/popups must stay usable underneath. */
+.basemap-label {
+  background: none !important;
+  border: none !important;
+  pointer-events: none !important;
+}
+
+.basemap-label span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+  font-family: 'Inter', sans-serif;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.5);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+}
+
+/* Country names sit behind the state labels: lighter and slightly smaller, so
+   the world view reads as context rather than competing with the overlays. */
+.basemap-label--country span {
+  font-size: 8px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(148, 163, 184, 0.42);
+}
+
+/* Attribution footer: with no tile provider, this credits the boundary data. */
+.leaflet-control-attribution {
+  background: rgba(8, 12, 24, 0.72) !important;
+  color: var(--text-muted) !important;
+  font-size: 9px !important;
+  backdrop-filter: blur(8px);
+}
+
+.leaflet-control-attribution a {
+  color: var(--text-secondary) !important;
 }
 
 .leaflet-control-zoom a {
