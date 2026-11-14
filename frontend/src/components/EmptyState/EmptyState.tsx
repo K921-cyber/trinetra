@@ -12,7 +12,7 @@ interface EmptyStateProps {
 
 /** Shared empty state used across panels (Watches, Live Feed, Graph View, etc.)
  *  — keeps every "nothing here yet" moment looking intentional and actionable
- *  instead of a blank box. Mirrors the visual language of ErrorState. */
+ *  instead of a blank box, in the same visual language as the rest of the panels. */
 export default function EmptyState({
   icon,
   title,

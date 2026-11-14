@@ -1190,8 +1190,6 @@ trinetra/
 │   │   │   ├── DashboardStats/         # Stats bar (during/after scan)
 │   │   │   ├── ScanProgress/           # Scan progress indicator
 │   │   │   ├── EmptyState/             # No-results placeholder
-│   │   │   ├── ErrorState/             # Error placeholder
-│   │   │   ├── Skeleton/               # Shimmer loading skeleton
 │   │   │   ├── ToastNotification/      # Toast notifications
 │   │   │   └── Icons/                  # Shared icon set
 │   │   ├── store/
@@ -1206,7 +1204,6 @@ trinetra/
 │   │   │   ├── useThreatFeed.ts         # WebSocket threat feed hook (auto-reconnect)
 │   │   │   ├── wsUtils.ts              # WebSocket URL builder
 │   │   │   ├── pluginMapper.ts          # API response → frontend types
-│   │   │   ├── indiaStatesGeoJSON.ts    # India GeoJSON boundaries (original asset)
 │   │   │   └── basemap/                 # GENERATED — do not hand-edit
 │   │   │       ├── indiaStates.ts       # 36 states/UTs + label points (63 KB)
 │   │   │       └── worldCountries.ts    # World country outlines + label ranks (159 KB)
