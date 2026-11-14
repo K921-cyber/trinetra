@@ -86,7 +86,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/vinaypaul904-art/trinetra.git
+git clone https://github.com/K921-cyber/trinetra.git
 cd trinetra
 
 # Copy and customize environment variables
@@ -1488,7 +1488,7 @@ docker --version && docker compose version
 adduser --disabled-password --gecos "" deploy
 usermod -aG docker deploy
 su - deploy
-git clone https://github.com/vinaypaul904-art/trinetra.git ~/trinetra
+git clone https://github.com/K921-cyber/trinetra.git ~/trinetra
 cd ~/trinetra
 cp .env.example .env
 nano .env          # fill in the production checklist above
@@ -1756,7 +1756,7 @@ class MyNewPlugin(OSINTPlugin):
 
 ```bash
 # Clone the repo
-git clone https://github.com/vinaypaul904-art/trinetra.git
+git clone https://github.com/K921-cyber/trinetra.git
 cd trinetra
 
 # Docker (recommended for development)
@@ -1816,8 +1816,8 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
   </p>
   <br/>
   <p>
-    <a href="https://github.com/vinaypaul904-art/trinetra/issues">Report Bug</a> ·
-    <a href="https://github.com/vinaypaul904-art/trinetra/issues">Request Feature</a> ·
-    <a href="https://github.com/vinaypaul904-art/trinetra">GitHub</a>
+    <a href="https://github.com/K921-cyber/trinetra/issues">Report Bug</a> ·
+    <a href="https://github.com/K921-cyber/trinetra/issues">Request Feature</a> ·
+    <a href="https://github.com/K921-cyber/trinetra">GitHub</a>
   </p>
 </div>
