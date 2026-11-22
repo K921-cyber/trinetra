@@ -77,6 +77,9 @@ INDIAN_CITIES = [
     {"name": "Ahmedabad", "lat": 23.0225, "lng": 72.5714},
     {"name": "Jaipur", "lat": 26.9124, "lng": 75.7873},
     {"name": "Srinagar", "lat": 34.0837, "lng": 74.7973},
+    {"name": "Jammu", "lat": 32.7266, "lng": 74.8570},
+    {"name": "Leh", "lat": 34.1526, "lng": 77.5771},
+    {"name": "Kargil", "lat": 34.5539, "lng": 76.1349},
 ]
 
 # Country codes → full names for display
@@ -481,6 +484,9 @@ class RealThreatService:
                 "Ahmedabad": "Gujarat",
                 "Jaipur": "Rajasthan",
                 "Srinagar": "Jammu & Kashmir",
+                "Jammu": "Jammu & Kashmir",
+                "Leh": "Ladakh",
+                "Kargil": "Ladakh",
             }
             state_crime = {d["state"]: d["incidentCount"] for d in NCRB_CRIME_DATA_2022}
             weights = []

@@ -41,6 +41,9 @@ def _get_ncrb_city_data():
         {"name": "Ahmedabad", "lat": 23.0225, "lng": 72.5714, "state": "Gujarat"},
         {"name": "Jaipur", "lat": 26.9124, "lng": 75.7873, "state": "Rajasthan"},
         {"name": "Srinagar", "lat": 34.0837, "lng": 74.7973, "state": "Jammu & Kashmir"},
+        {"name": "Jammu", "lat": 32.7266, "lng": 74.8570, "state": "Jammu & Kashmir"},
+        {"name": "Leh", "lat": 34.1526, "lng": 77.5771, "state": "Ladakh"},
+        {"name": "Kargil", "lat": 34.5539, "lng": 76.1349, "state": "Ladakh"},
     ]
     
     # Build state → incident count map

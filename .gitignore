@@ -23,7 +23,7 @@ venv/
 .venv/
 
 # ── Node ────────────────────────────────────────────────────
-frontend/node_modules/
+node_modules/
 frontend/dist/
 
 # ── Database files ──────────────────────────────────────────

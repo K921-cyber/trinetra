@@ -31,6 +31,10 @@ NCRB_CRIME_DATA_2022 = [
     {"state": "Chhattisgarh", "stateCode": "CG", "incidentCount": 158, "coordinates": [21.2787, 81.8661]},
     {"state": "Punjab", "stateCode": "PB", "incidentCount": 148, "coordinates": [31.1471, 75.3412]},
     {"state": "Goa", "stateCode": "GA", "incidentCount": 81, "coordinates": [15.4909, 73.8278]},
+    # Ladakh is reported separately from J&K since it became a UT in Oct 2019.
+    # 2022 figure from NCRB's State/UT-wise cyber crime table (cases involving
+    # communication devices as medium/target), published by PIB/MHA.
+    {"state": "Ladakh", "stateCode": "LA", "incidentCount": 3, "coordinates": [34.1526, 77.5771]},
 ]
 
 

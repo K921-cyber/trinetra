@@ -9,6 +9,12 @@
  *   - src/utils/basemap/worldCountries.ts  world country outlines + label points
  *                                          (110m admin-0)
  *
+ * Natural Earth follows de facto lines, which cuts Jammu & Kashmir at the Line
+ * of Control, omits PoK / Gilgit-Baltistan / Siachen and Aksai Chin, and stops
+ * Arunachal Pradesh at the McMahon Line. Those three regions are replaced with
+ * India's official claim (Survey of India) so the basemap shows the complete
+ * national boundary — see OFFICIAL_INDIA below.
+ *
  * Shapes are simplified (Douglas–Peucker) and coordinate-quantized so the whole
  * basemap stays a few hundred KB in the bundle.
  *
@@ -47,6 +53,18 @@ const SOURCES = {
     precision: 2,
     minRingArea: 0.02,
     label: 'Natural Earth 1:110m Admin-0 Countries (public domain)',
+  },
+  // India's official boundary (includes PoK, Gilgit-Baltistan, Siachen and
+  // Aksai Chin). MIT — https://github.com/AbhinavSwami28/india-official-geojson
+  official: {
+    url: 'https://raw.githubusercontent.com/AbhinavSwami28/india-official-geojson/main/india-states-simplified.geojson',
+    file: 'india-official-states-simplified.geojson',
+    tolerance: 0.01,
+    precision: 3,
+    minRingArea: 0.0005,
+    label: 'Official Indian boundaries (Survey of India claim), MIT',
+    // Natural Earth outlines for these are incomplete; replace them wholesale.
+    overrideNames: new Set(['Jammu and Kashmir', 'Ladakh', 'Arunachal Pradesh']),
   },
 };
 
@@ -282,6 +300,48 @@ async function main() {
       properties: { name, code, label },
     });
   }
+  // ---------- Official boundary overrides ----------
+  // Swap the incomplete de facto outlines for India's official claim. Names are
+  // kept from Natural Earth so ISO codes, ordering and the modern state set
+  // (Telangana, Odisha, Uttarakhand, merged DNH & Daman-Diu) stay intact.
+  console.log('Official boundary overrides:');
+  const officialRaw = await loadSource(SOURCES.official, cacheDir);
+  const officialByName = new Map();
+  for (const feature of officialRaw.features) {
+    const name = feature.properties?.NAME_1;
+    if (!name || !SOURCES.official.overrideNames.has(name)) continue;
+    const sourceMulti = toMultiPolygon(feature.geometry);
+    if (!sourceMulti) continue;
+    const polygons = sourceMulti
+      .map((rings) => cleanPolygon(rings, SOURCES.official))
+      .filter((rings) => rings.length > 0);
+    if (!polygons.length) continue;
+    const label = labelPoint(polygons);
+    if (!label || !ok(label[0]) || !ok(label[1])) continue;
+    officialByName.set(name, {
+      geometry: {
+        type: 'MultiPolygon',
+        coordinates: polygons.map((rings) =>
+          rings.map((r) => r.map(([lng, lat]) => [small(lng), small(lat)])),
+        ),
+      },
+      label,
+    });
+  }
+  for (let i = 0; i < states.length; i++) {
+    const official = officialByName.get(states[i].properties.name);
+    if (!official) continue;
+    states[i] = {
+      geometry: official.geometry,
+      properties: {
+        name: states[i].properties.name,
+        code: states[i].properties.code,
+        label: official.label,
+      },
+    };
+    console.log(`  replaced ${states[i].properties.name} with official extent`);
+  }
+
   states.sort((a, b) => a.properties.name.localeCompare(b.properties.name));
   if (states.length < 30) throw new Error(`Only ${states.length} Indian states found — aborting`);
 

@@ -31,7 +31,7 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Ensure bcrypt is available (multi-stage copy can miss compiled extensions)
-RUN pip install --no-cache-dir bcrypt>=4.0.1
+RUN pip install --no-cache-dir "bcrypt>=4.0.1"
 
 # Copy application code
 COPY . .
