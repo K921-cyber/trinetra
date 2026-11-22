@@ -594,7 +594,7 @@ IndiaMap (React Component)
 │   ├── MapController (programmatic center/zoom)
 │   ├── AnimatedAttackOverlay (SVG lines + traveling dots)
 │   ├── CrimeHeatmap (GeoJSON state boundaries + NCRB)
-│   ├── CityMarkers (10 major Indian cities, NCRB-risk)
+│   ├── CityMarkers (13 major Indian cities, NCRB-risk)
 │   └── DestinationPins (aggregated attack targets)
 ├── AttackCounter (live badge: critical/medium count)
 ├── MapIntelHud (focus, layers, live feed counts, per-feed chips)
@@ -608,12 +608,19 @@ IndiaMap (React Component)
 ### Local basemap (no external map API)
 
 The basemap ships **inside the app**: `LocalBasemap.tsx` renders bundled
-Natural Earth GeoJSON — 36 Indian states/UTs plus world country outlines —
-generated once by `frontend/scripts/build-local-basemap.mjs` (public-domain
-source, ~210 KB total). The map makes **zero requests to any tile provider**, so
-deploying it needs no map key, no tile quota, no per-request billing and no
-dependence on a third party's uptime; it also works fully offline and without
-WebGL.
+GeoJSON — 36 Indian states/UTs plus world country outlines — generated once by
+`frontend/scripts/build-local-basemap.mjs` (~224 KB total). The map makes
+**zero requests to any tile provider**, so deploying it needs no map key, no tile
+quota, no per-request billing and no dependence on a third party's uptime; it
+also works fully offline and without WebGL.
+
+Context shapes come from Natural Earth (public domain). **Jammu & Kashmir,
+Ladakh and Arunachal Pradesh use India's official boundary** (Survey of India
+claim, MIT source: `india-official-geojson`) instead, because Natural Earth
+draws de facto lines that cut J&K at the Line of Control (dropping PoK,
+Gilgit-Baltistan and Siachen), omit Aksai Chin, and stop Arunachal Pradesh at
+the McMahon Line. The three regions are swapped by the generator, so the map
+shows the complete national boundary the way the Survey of India publishes it.
 
 The map opens **centred on India**, framed so the subcontinent is the subject with
 the surrounding world (Indian Ocean, Arabia, China, South-East Asia) still visible
@@ -645,7 +652,7 @@ CSS filter. Regenerate the bundled boundaries with
 
 The HUD is deliberately plain DOM (not Leaflet layers), so it never intercepts map clicks and costs nothing to animate. It reads straight from the same `attackVectors` array the map draws, so its numbers always match what you see.
 
-> **Honest note on "no external requests":** the *basemap* itself makes zero network calls (bundled GeoJSON), but the page shell still loads the Inter/JetBrains Mono webfonts from Google Fonts and Leaflet's stylesheet from unpkg (`frontend/index.html`). Self-host those two if you need a truly air-gapped deployment.
+> **Honest note on "no external requests":** the *basemap* itself makes zero network calls (bundled GeoJSON), but the page shell still loads the Inter/JetBrains Mono webfonts from Google Fonts and Leaflet's stylesheet from unpkg (`frontend/index.html`). Leaflet's `.js` is bundled into `/assets` by the Vite build, but its `.css` is not imported in source, so the page still fetches it from unpkg and the `unpkg.com` allowance stays in the security headers. Self-host the fonts and Leaflet's CSS from disk at asset build time if you need a truly air-gapped deployment.
 
 ### Animation System
 
@@ -660,7 +667,7 @@ Attack vectors are rendered as an **SVG overlay** using Leaflet's `L.svgOverlay`
 
 ### City Risk Markers
 
-10 major Indian cities plotted with NCRB 2022 cyber crime statistics:
+13 major Indian cities plotted with NCRB 2022 cyber crime statistics:
 
 - **Color-coded circles**: Safe (green), Medium (yellow), Critical (red)
 - **Pulsing animation** for critical destinations
@@ -829,10 +836,10 @@ All data in TRINETRA is **real** — no simulated or placeholder data. See the t
 
 ### India-Specific Data
 
-- **NCRB 2022** — Official cyber crime statistics for 23 Indian states/UTs
+- **NCRB 2022** — Official cyber crime statistics for 24 Indian states/UTs
 - **70+ curated India-specific data breaches** (Aadhaar, IRCTC, BigBasket, CoWIN, Truecaller, Jio, Paytm, etc.)
 - **India GeoJSON** — State boundaries for all states/UTs
-- **City targeting** — 10 major Indian cities with NCRB-weighted attack distribution
+- **City targeting** — 13 major Indian cities with NCRB-weighted attack distribution
 
 <br/>
 
@@ -922,7 +929,7 @@ All data in TRINETRA is **real** — no simulated or placeholder data. See the t
 
 ### 🛡️ India-Specific Intelligence
 
-- NCRB 2022 cyber crime data for 23 states/UTs
+- NCRB 2022 cyber crime data for 24 states/UTs
 - 70+ curated India-specific data breaches
 - India GeoJSON map with state boundaries
 - CERT-In incident reporting
@@ -1113,7 +1120,7 @@ trinetra/
 │   │   │   └── api_key_auth.py         # User auth (register, login, tokens, credits, dedicated SQLite DB)
 │   │   ├── templates/                  # Jinja2 HTML email templates (otp, welcome, account_verified, forgot_password)
 │   │   ├── data/
-│   │   │   └── ncrb_crime_data.py      # NCRB 2022 cyber crime statistics (23 states)
+│   │   │   └── ncrb_crime_data.py      # NCRB 2022 cyber crime statistics (24 states)
 │   │   ├── models/
 │   │   │   └── schemas.py              # Pydantic request/response models
 │   │   ├── plugins/                    # 15 OSINT plugins (auto-discovered)
@@ -1211,7 +1218,7 @@ trinetra/
 │   │   ├── main.tsx                     # React entry point with context providers
 │   │   └── styles.css                   # Complete dark-themed design system
 │   ├── scripts/
-│   │   └── build-local-basemap.mjs      # Regenerates utils/basemap/*.ts from Natural Earth
+│   │   └── build-local-basemap.mjs      # Regenerates utils/basemap/*.ts (Natural Earth + India official boundaries)
 │   ├── Dockerfile                       # Multi-stage Node → Nginx build
 │   ├── nginx.conf                       # Nginx: serves the SPA, proxies /api and /ws
 │   ├── vite.config.ts                   # Dev server (port 3000) + /api and /ws proxy
@@ -1654,6 +1661,51 @@ gunzip -c ~/backups/trinetra-YYYY-MM-DD.sql.gz | docker exec -i trinetra-db psql
 | Everyone shares one rate-limit bucket | requests arrive via the proxy | keep `TRUST_PROXY_HEADERS=true` (compose default) |
 | Payments create an order but credits never land | Cashfree can’t reach a `localhost` webhook | set `CASHFREE_WEBHOOK_URL` to your public HTTPS URL, or rely on `/api/payment/verify` polling |
 | Map is blank after an update | stale hashed assets cached in the browser | hard refresh (Ctrl+Shift+R); `frontend/nginx.conf` caches hashed assets for 1 year, so a new build usually fixes itself once the new hashes are referenced |
+
+### Deploy build failures — `node_modules` and platform binaries
+
+If the platform builds the frontend from source (Zoho, Render, Railway, Vercel, Netlify, …), **never upload or commit `frontend/node_modules`**. That folder holds native binaries compiled for the machine that ran `npm install`:
+
+| Installed on a Windows dev box | What a Linux builder needs instead |
+|---|---|
+| `@esbuild/win32-x64` | `@esbuild/linux-x64` |
+| `@rollup/rollup-win32-x64-msvc` | `@rollup/rollup-linux-x64-gnu` |
+
+No `chmod`, permissions fix or re-upload makes those run on a Linux builder — the dependencies have to be installed fresh on the target OS. `node_modules` is already in `.gitignore`, so a Git-based deploy never has this problem; it only bites when you upload a folder from your own disk.
+
+**Package a clean archive instead.** `tar` ships with Git Bash, macOS and Linux (`zip` is not always installed):
+
+```bash
+cd trinetra
+tar -czf ../trinetra-deploy.tar.gz \
+  --exclude=node_modules --exclude=dist --exclude=.git \
+  --exclude='*.db' --exclude=__pycache__ --exclude=venv --exclude=.venv \
+  --exclude=frontend/tsconfig.tsbuildinfo --exclude=.env .
+```
+
+A clean tree is a few hundred KB; a tree carrying `node_modules` is ~190 MB. **If your upload is hundreds of megabytes, `node_modules` is in it.**
+
+Then set the platform's build steps:
+
+| Setting | Value |
+|---|---|
+| Install | `cd frontend && npm ci` |
+| Build | `cd frontend && npm run build` |
+| Output / publish directory | `frontend/dist` |
+
+`npm run build` invokes TypeScript and Vite through `node` (`node node_modules/typescript/bin/tsc`), so the build never depends on the executable bit of those files.
+
+Read the **first** error in the build log, not the last:
+
+| Error | Cause | Fix |
+|---|---|---|
+| `tsc: Permission denied` | a `node_modules` copied from another machine is in the upload | remove `node_modules` from the source tree and redeploy |
+| `Cannot find module '@rollup/rollup-linux-x64-gnu'` or `esbuild ... Failed to install correctly` | Windows/macOS-built binaries reused on Linux | same — let `npm ci` run on the builder itself |
+| `npm ci` fails with `EUSAGE` / lockfile out of sync | `package-lock.json` missing from the upload | include `frontend/package-lock.json` |
+| `tsc: not found` / `vite: not found` | install step skipped or ran outside `frontend/` | make the install command `cd frontend && npm ci` |
+| Build passes but the site is blank | wrong publish directory | point it at `frontend/dist` |
+
+> `.env` is excluded from the archive on purpose — enter those values in the platform's environment-variable panel instead of shipping secrets in the uploaded source.
 
 <br/>
 

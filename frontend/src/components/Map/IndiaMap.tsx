@@ -37,9 +37,9 @@ const WORLD_BOUNDS = L.latLngBounds(
 // world basemap fills whatever space is left over — India reads as the subject
 // with no empty bands around the frame.
 const INDIA_FOCUS_BOUNDS = L.latLngBounds(
-  L.latLng(3, 52),
-  L.latLng(44, 112)
-);
+  L.latLng(0, 48),
+  L.latLng(46, 118)
+); // Expanded full Indian boundary with world context on all sides
 const INDIA_FOCUS_CENTER: [number, number] = [23.5, 82]; // centre of INDIA_FOCUS_BOUNDS
 const DEFAULT_ZOOM = 4; // pre-fit placeholder; DefaultView replaces it on mount
 
