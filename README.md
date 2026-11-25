@@ -1567,6 +1567,14 @@ sudo ufw enable
 
 Server hardening worth five more minutes: SSH keys only (`PasswordAuthentication no`), `unattended-upgrades`, and a non-root deploy user (step 3).
 
+The bundled Nginx server (`frontend/nginx.conf`) sets the following security response headers on every page and asset, enforced client-side:
+
+- `Content-Security-Policy` — strict default policy (`default-src 'self'` + `base-uri 'self'` + `object-src 'none'` + `frame-ancestors 'self'` + `manifest-src 'self'` + `worker-src 'self' blob:` + `script-src 'self' https://sdk.cashfree.com` + `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com` + `font-src 'self' data: https://fonts.gstatic.com` + `img-src 'self' data: blob: https://unpkg.com https://*.cashfree.com` + `connect-src 'self' https://*.cashfree.com` + `frame-src https://*.cashfree.com` + `form-action 'self' https://*.cashfree.com`). Only the Cashfree SDK and Cashfree payment endpoints are allowed to do network calls besides the app itself; there is no `'unsafe-eval'`.
+- `X-Content-Type-Options: nosniff` — stops the browser from MIME-sniffing responses away from the declared `Content-Type`.
+- `Referrer-Policy: strict-origin-when-cross-origin` — keeps referrer data local, stripping the full path on cross-origin requests.
+
+These are delivered from a single shared file (`frontend/security-headers.conf`) included at server level and re-applied in each Nginx location that declares its own `add_header` block (the asset-cache and OPTIONS locations). `Security-headers.conf` ships with the image; no extra package or config beyond Nginx is needed. To self-host Leaflet's CSS and the Google Fonts (currently fetched from unpkg and Google Fonts respectively) so the app needs no third-party request at all, point `VITE_MAP_TILE_URL` to a self-hosted tile server and build the bundled basemap — see the [Interactive Map](#️-interactive-map) section.
+
 ---
 
 ### Option B — free static frontend + API on a VPS
